@@ -1,0 +1,1042 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام مقصات - المطور</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Cairo', 'sans-serif'] },
+                    colors: {
+                        primary: '#1e40af',
+                        secondary: '#3b82f6',
+                        accent: '#f59e0b',
+                        background: '#f8fafc'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Cairo', sans-serif; background-color: #f8fafc; }
+        .tab-content, .sub-tab-content { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .tab-content.active, .sub-tab-content.active { display: block; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        #toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+        .toast { min-width: 250px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 600; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 10px; animation: slideUp 0.3s forwards; }
+        .toast.success { background-color: #10b981; }
+        .toast.error { background-color: #ef4444; }
+        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        /* Modal Styles */
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);}
+        .modal.active { display: flex; animation: fadeIn 0.2s; }
+    </style>
+</head>
+<body class="text-gray-800 h-screen flex flex-col">
+
+    <div id="toast-container"></div>
+
+    <div id="loginScreen" class="fixed inset-0 bg-gray-100 z-[999] flex flex-col items-center justify-center">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center">
+            <i class="fa-solid fa-scissors text-5xl text-primary mb-4"></i>
+            <h1 class="text-3xl font-bold text-gray-800 mb-8">نظام المقصات</h1>
+            
+            <div class="flex border-b mb-6">
+                <button onclick="switchLoginTab('branch')" id="btn-login-branch" class="flex-1 py-2 font-bold text-primary border-b-2 border-primary">دخول فرع</button>
+                <button onclick="switchLoginTab('admin')" id="btn-login-admin" class="flex-1 py-2 font-bold text-gray-500 border-b-2 border-transparent">دخول إدارة</button>
+            </div>
+
+            <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
+                <input type="text" id="loginCode" required placeholder="كود الفرع / كود المسؤول" class="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary text-center">
+                <input type="password" id="loginPass" required placeholder="كلمة المرور" class="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-primary text-center">
+                <button type="submit" id="loginBtn" class="w-full bg-primary text-white py-3 rounded-lg font-bold shadow-md hover:bg-blue-800 transition">تسجيل الدخول</button>
+            </form>
+            <div id="loginLoading" class="hidden mt-4 text-primary"><i class="fa-solid fa-circle-notch fa-spin text-2xl"></i></div>
+        </div>
+    </div>
+
+    <div id="appContainer" class="hidden flex-col h-full w-full">
+        <header class="bg-primary text-white shadow-md sticky top-0 z-50">
+            <div class="container mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-scissors text-2xl text-accent"></i>
+                    <h1 class="text-2xl font-bold tracking-wider">نظام مقصات</h1>
+                    <span id="userInfoDisplay" class="bg-white text-primary text-xs px-2 py-1 rounded-full font-bold ml-4"></span>
+                </div>
+                <nav class="flex flex-wrap justify-center gap-2 bg-blue-900 p-1 rounded-lg" id="mainNav">
+                    <button onclick="switchTab('mainTab')" id="btn-mainTab" class="nav-btn px-4 py-2 rounded-md font-semibold transition-all duration-200 bg-white text-primary shadow-sm"><i class="fa-solid fa-house ml-2"></i>الرئيسية</button>
+                    <button onclick="openPendingOrdersModal()" class="px-4 py-2 rounded-md font-semibold text-white hover:bg-white/20 transition-all bg-amber-500"><i class="fa-solid fa-clock-rotate-left ml-2"></i>الأوردرات المعلقة</button>
+                    <button onclick="switchTab('adminTab')" id="btn-adminTab" class="nav-btn hidden px-4 py-2 rounded-md font-semibold transition-all duration-200 hover:bg-white/20 text-white"><i class="fa-solid fa-gears ml-2"></i>الإدارة</button>
+                    <button onclick="logout()" class="px-4 py-2 rounded-md font-semibold text-red-300 hover:bg-red-500 hover:text-white transition-all"><i class="fa-solid fa-sign-out-alt ml-2"></i>خروج</button>
+                </nav>
+            </div>
+        </header>
+
+        <main class="flex-grow container mx-auto px-4 py-8 overflow-auto">
+            
+            <section id="mainTab" class="tab-content active">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="col-span-1 md:col-span-2 bg-white rounded-xl shadow-sm p-6 border border-gray-100 flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+                        <div class="w-full">
+                            <label class="block text-sm font-semibold text-gray-600 mb-2">تاريخ اليوم</label>
+                            <input type="date" id="recordDate" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary outline-none transition" onchange="loadRecords()">
+                        </div>
+                        <div class="w-full relative">
+                            <label class="block text-sm font-semibold text-gray-600 mb-2">اختر المندوب</label>
+                            <select id="recordDelegate" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary outline-none transition" onchange="updateDelegateTotal()">
+                                <option value="">-- يرجى اختيار مندوب --</option>
+                            </select>
+                            <div id="delegateTotalBox" class="mt-2 text-sm font-bold text-teal-600 hidden bg-teal-50 p-2 rounded-lg border border-teal-100">
+                                إجمالي مقصات المندوب لليوم: <span id="delegateTotalValue" class="text-lg">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-span-1 bg-gradient-to-br from-primary to-secondary rounded-xl shadow-lg p-6 text-white flex flex-col justify-center items-center relative overflow-hidden">
+                        <i class="fa-solid fa-scissors absolute -left-4 -bottom-4 text-6xl opacity-20"></i>
+                        <h3 class="text-lg font-semibold mb-2 z-10">إجمالي مقصات اليوم</h3>
+                        <div class="text-5xl font-bold z-10" id="totalClicksCounter">0</div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-8">
+                    <div class="flex justify-between items-center mb-4 pb-2 border-b border-gray-100">
+                        <h3 class="text-lg font-bold text-gray-800"><i class="fa-solid fa-hand-pointer ml-2 text-secondary"></i>الفروع (لتحويل المقصات إليها)</h3>
+                        <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">كليك يمين لتحديد الكمية يدوياً</span>
+                    </div>
+                    <div id="loadingBranches" class="text-center text-gray-500 py-8 hidden">
+                        <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><br>جاري تحميل البيانات...
+                    </div>
+                    <div id="branchButtonsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"></div>
+                    <div id="emptyBranchesMsg" class="text-center text-gray-500 py-4 hidden">لا توجد فروع متاحة.</div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                        <h3 class="font-bold text-gray-800"><i class="fa-solid fa-table-list ml-2 text-secondary"></i>سجل مقصات اليوم</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right border-collapse">
+                            <thead>
+                                <tr class="bg-gray-100 text-gray-600 text-sm">
+                                    <th class="p-3 border-b">م</th>
+                                    <th class="p-3 border-b">الوقت</th>
+                                    <th class="p-3 border-b">المندوب</th>
+                                    <th class="p-3 border-b">الفرع</th>
+                                    <th class="p-3 border-b text-center">الكمية</th>
+                                    <th class="p-3 border-b">تفاصيل الأوردر</th>
+                                    <th class="p-3 border-b text-center admin-only hidden">إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recordsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="adminTab" class="tab-content">
+                <div class="flex flex-col md:flex-row gap-6">
+                    <div class="w-full md:w-1/4">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden sticky top-24">
+                            <button onclick="switchAdminTab('adminsSubTab')" id="btn-adminsSubTab" class="admin-nav-btn w-full text-right px-6 py-4 font-bold border-b border-gray-100 bg-gray-50 text-primary border-r-4 border-r-primary"><i class="fa-solid fa-user-shield ml-2"></i>المسؤولين</button>
+                            <button onclick="switchAdminTab('branchesSubTab')" id="btn-branchesSubTab" class="admin-nav-btn w-full text-right px-6 py-4 font-bold border-b border-gray-100 text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-store ml-2"></i>الفروع</button>
+                            <button onclick="switchAdminTab('delegatesSubTab')" id="btn-delegatesSubTab" class="admin-nav-btn w-full text-right px-6 py-4 font-bold border-b border-gray-100 text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-users ml-2"></i>المناديب</button>
+                            <button onclick="switchAdminTab('reportsSubTab')" id="btn-reportsSubTab" class="admin-nav-btn w-full text-right px-6 py-4 font-bold text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-chart-pie ml-2"></i>التقارير</button>
+                        </div>
+                    </div>
+
+                    <div class="w-full md:w-3/4">
+                        
+                        <div id="adminsSubTab" class="sub-tab-content active">
+                            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-6">
+                                <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fa-solid fa-plus text-secondary ml-2"></i>إضافة مسؤول جديد</h2>
+                                <form onsubmit="handleAddAdmin(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <input type="text" id="adminName" required placeholder="الاسم" class="px-4 py-2 border rounded-lg outline-none">
+                                    <input type="text" id="adminCode" required placeholder="كود الدخول" class="px-4 py-2 border rounded-lg outline-none">
+                                    <input type="password" id="adminPass" required placeholder="كلمة المرور" class="px-4 py-2 border rounded-lg outline-none">
+                                    <button type="submit" class="sm:col-span-3 bg-primary text-white py-2 rounded-lg font-bold">حفظ المسؤول</button>
+                                </form>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                <table class="w-full text-right"><thead class="bg-gray-50"><tr><th class="p-3">الاسم</th><th class="p-3">الكود</th><th class="p-3 text-center">تعديل</th></tr></thead><tbody id="adminsTableBody"></tbody></table>
+                            </div>
+                        </div>
+
+                        <div id="branchesSubTab" class="sub-tab-content">
+                            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-6">
+                                <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fa-solid fa-plus text-secondary ml-2"></i>إضافة فرع جديد</h2>
+                                <form onsubmit="handleAddBranch(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <input type="text" id="branchName" required placeholder="اسم الفرع (استخدم كلمة 'اوردار' لفرع الأوردرات)" class="px-4 py-2 border rounded-lg outline-none">
+                                    <input type="text" id="branchCode" required placeholder="كود الفرع (للدخول)" class="px-4 py-2 border rounded-lg outline-none">
+                                    <input type="password" id="branchPass" required placeholder="كلمة المرور" class="px-4 py-2 border rounded-lg outline-none">
+                                    <button type="submit" class="sm:col-span-3 bg-primary text-white py-2 rounded-lg font-bold">حفظ الفرع</button>
+                                </form>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                <table class="w-full text-right"><thead class="bg-gray-50"><tr><th class="p-3">الفرع</th><th class="p-3">الكود</th><th class="p-3 text-center">تعديل</th></tr></thead><tbody id="branchesTableBody"></tbody></table>
+                            </div>
+                        </div>
+
+                        <div id="delegatesSubTab" class="sub-tab-content">
+                            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-6">
+                                <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fa-solid fa-plus text-secondary ml-2"></i>إضافة مندوب جديد</h2>
+                                <form onsubmit="handleAddDelegate(event)" class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                    <input type="text" id="delName" required placeholder="اسم المندوب" class="px-4 py-2 border rounded-lg outline-none">
+                                    <input type="text" id="delPhone" required placeholder="رقم هاتف المندوب" class="px-4 py-2 border rounded-lg outline-none">
+                                    <input type="text" id="delCode" required placeholder="كود المندوب" class="px-4 py-2 border rounded-lg outline-none">
+                                    <select id="delBranch" required class="px-4 py-2 border rounded-lg outline-none">
+                                        <option value="">-- اختر الفرع التابع له --</option>
+                                    </select>
+                                    <button type="submit" class="sm:col-span-4 bg-primary text-white py-2 rounded-lg font-bold">حفظ المندوب</button>
+                                </form>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                <table class="w-full text-right"><thead class="bg-gray-50"><tr><th class="p-3">الكود</th><th class="p-3">الاسم</th><th class="p-3">رقم الهاتف</th><th class="p-3">الفرع التابع</th><th class="p-3 text-center">تعديل</th></tr></thead><tbody id="delegatesTableBody"></tbody></table>
+                            </div>
+                        </div>
+
+                        <div id="reportsSubTab" class="sub-tab-content">
+                            <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-100 mb-6">
+                                <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                                    <div><label class="block text-sm font-semibold mb-2">من تاريخ</label><input type="date" id="repFromDate" class="w-full px-4 py-2 border rounded-lg"></div>
+                                    <div><label class="block text-sm font-semibold mb-2">إلى تاريخ</label><input type="date" id="repToDate" class="w-full px-4 py-2 border rounded-lg"></div>
+                                    <div><label class="block text-sm font-semibold mb-2">كود المندوب</label><input type="text" id="repDelCode" placeholder="الكل إذا ترك فارغاً" class="w-full px-4 py-2 border rounded-lg"></div>
+                                    <div><label class="block text-sm font-semibold mb-2">رقم الأوردر</label><input type="text" id="repOrderNum" placeholder="بحث برقم أوردر" class="w-full px-4 py-2 border rounded-lg"></div>
+                                    <button onclick="generateReport()" class="bg-secondary text-white py-2 rounded-lg font-bold h-[42px]">عرض التقرير</button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 mb-6 text-center">
+                                <div class="bg-gradient-to-r from-teal-500 to-emerald-500 rounded-xl shadow-lg p-6 text-white">
+                                    <h3 class="text-xl font-semibold mb-2">إجمالي المقصات / الحركات</h3>
+                                    <div class="text-4xl font-bold" id="reportTotalClicks">0</div>
+                                </div>
+                            </div>
+                            <div id="reportLoading" class="text-center py-4 hidden"><i class="fa-solid fa-circle-notch fa-spin text-2xl text-secondary"></i></div>
+                            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+                                <table class="w-full text-right">
+                                    <thead class="bg-gray-50 text-sm"><tr>
+                                        <th class="p-3">التاريخ والوقت</th>
+                                        <th class="p-3">المندوب</th>
+                                        <th class="p-3">مُحول إلى</th>
+                                        <th class="p-3 text-center">الكمية</th>
+                                        <th class="p-3">تفاصيل الأوردر</th>
+                                        <th class="p-3">حالة ومدة التوصيل</th>
+                                    </tr></thead>
+                                    <tbody id="reportTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="editModal" class="modal">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="modalTitle" class="text-xl font-bold text-gray-800">تعديل</h2>
+                <button onclick="closeModal()" class="text-gray-500 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <form id="editForm" onsubmit="handleEditSave(event)" class="space-y-4">
+                <div id="modalFields"></div>
+                <button type="submit" class="w-full bg-accent text-white py-2 rounded-lg font-bold shadow-md">حفظ التعديلات</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="orderModal" class="modal">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+            <h2 class="text-xl font-bold text-primary mb-4 border-b pb-2"><i class="fa-solid fa-box-open ml-2"></i>تسجيل بيانات الأوردر</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-600 mb-1">رقم الأوردر</label>
+                    <input type="text" id="orderNumberInput" placeholder="أدخل رقم الأوردر" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-secondary outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-600 mb-1">قيمة الأوردر</label>
+                    <input type="number" id="orderValueInput" placeholder="أدخل قيمة الأوردر" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-secondary outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-600 mb-1">رقم واتساب العميل</label>
+                    <input type="tel" id="orderWhatsappInput" placeholder="مثال: 01xxxxxxxxx" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-left" dir="ltr">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-600 mb-1">الكمية / يحسب بمقدار</label>
+                    <select id="orderCountInput" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-secondary outline-none font-bold">
+                        <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                        <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+                        <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+                        <option value="10">10</option>
+                    </select>
+                </div>
+                <div class="flex flex-col gap-2 pt-2">
+                    <div class="flex gap-2">
+                        <button onclick="saveOrderData(false)" class="flex-1 bg-primary text-white py-2 rounded-lg font-bold hover:bg-blue-800 text-sm">حفظ وحساب</button>
+                        <button onclick="saveOrderData(true)" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold hover:bg-green-600 flex items-center justify-center gap-1 text-sm"><i class="fa-brands fa-whatsapp"></i> حفظ وإرسال</button>
+                    </div>
+                    <button onclick="closeOrderModal()" class="w-full bg-gray-200 text-gray-800 py-2 rounded-lg font-bold hover:bg-gray-300">إلغاء</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="weightModal" class="modal">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-xs text-center">
+            <h2 class="text-lg font-bold text-gray-800 mb-2">تحديد الكمية</h2>
+            <p class="text-sm text-gray-500 mb-4" id="weightBranchTitle"></p>
+            <input type="number" id="manualWeightInput" min="1" max="100" value="1" class="w-full px-4 py-3 border-2 border-secondary rounded-lg focus:ring-2 focus:ring-primary outline-none text-center text-xl font-bold mb-4">
+            <div class="flex gap-2">
+                <button onclick="saveManualWeight()" class="flex-1 bg-secondary text-white py-2 rounded-lg font-bold hover:bg-blue-600">تأكيد</button>
+                <button onclick="closeWeightModal()" class="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg font-bold hover:bg-gray-300">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة الأوردرات المعلقة -->
+    <div id="pendingOrdersModal" class="modal">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-4xl max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-xl font-bold text-amber-600"><i class="fa-solid fa-clock-rotate-left ml-2"></i>الأوردرات المعلقة (قيد التوصيل)</h2>
+                <button onclick="closePendingOrdersModal()" class="text-gray-500 hover:text-red-500"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div id="pendingLoading" class="text-center text-gray-500 py-8 hidden">
+                <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2"></i><br>جاري جلب الأوردرات...
+            </div>
+            <div class="overflow-auto flex-grow">
+                <table class="w-full text-right border-collapse">
+                    <thead class="bg-gray-50 text-sm sticky top-0">
+                        <tr>
+                            <th class="p-3 border-b">التاريخ والوقت</th>
+                            <th class="p-3 border-b">رقم الأوردر</th>
+                            <th class="p-3 border-b">المندوب</th>
+                            <th class="p-3 border-b text-center">إجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pendingOrdersTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DB_URL = 'https://story-64520-default-rtdb.firebaseio.com/';
+        let delegates = {}, branches = {}, admins = {}, currentRecords = {};
+        
+        let currentUser = null; 
+        let currentLoginTab = 'branch';
+
+        // متغيرات حفظ الفرع المؤقت للعمليات
+        let pendingBranchId = '';
+        let pendingBranchName = '';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('recordDate').value = today;
+            document.getElementById('repFromDate').value = today;
+            document.getElementById('repToDate').value = today;
+            
+            const savedUser = sessionStorage.getItem('scissorsUser');
+            if(savedUser) {
+                currentUser = JSON.parse(savedUser);
+                startApp();
+            }
+        });
+
+        function switchLoginTab(tab) {
+            currentLoginTab = tab;
+            const btnBranch = document.getElementById('btn-login-branch');
+            const btnAdmin = document.getElementById('btn-login-admin');
+            
+            if(tab === 'branch') {
+                btnBranch.className = "flex-1 py-2 font-bold text-primary border-b-2 border-primary";
+                btnAdmin.className = "flex-1 py-2 font-bold text-gray-500 border-b-2 border-transparent";
+            } else {
+                btnAdmin.className = "flex-1 py-2 font-bold text-primary border-b-2 border-primary";
+                btnBranch.className = "flex-1 py-2 font-bold text-gray-500 border-b-2 border-transparent";
+            }
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => {
+                if(!b.classList.contains('hidden')) {
+                    b.className = "nav-btn px-4 py-2 rounded-md font-semibold transition-all duration-200 hover:bg-white/20 text-white";
+                }
+            });
+            document.getElementById(tabId).classList.add('active');
+            document.getElementById('btn-' + tabId).className = "nav-btn px-4 py-2 rounded-md font-semibold transition-all duration-200 bg-white text-primary shadow-sm";
+        }
+
+        function switchAdminTab(tabId) {
+            document.querySelectorAll('.sub-tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.admin-nav-btn').forEach(b => {
+                b.className = "admin-nav-btn w-full text-right px-6 py-4 font-bold border-b border-gray-100 text-gray-600 hover:bg-gray-50";
+            });
+            document.getElementById(tabId).classList.add('active');
+            document.getElementById('btn-' + tabId).className = "admin-nav-btn w-full text-right px-6 py-4 font-bold border-b border-gray-100 bg-gray-50 text-primary border-r-4 border-r-primary";
+        }
+
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}"></i> <span>${msg}</span>`;
+            container.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const code = document.getElementById('loginCode').value.trim();
+            const pass = document.getElementById('loginPass').value.trim();
+            
+            document.getElementById('loginBtn').classList.add('hidden');
+            document.getElementById('loginLoading').classList.remove('hidden');
+
+            try {
+                if (currentLoginTab === 'admin') {
+                    const res = await fetch(`${DB_URL}admins.json`);
+                    const data = await res.json() || {};
+                    const adminId = Object.keys(data).find(k => data[k].code === code && data[k].password === pass);
+                    
+                    if(adminId || (code === 'admin' && pass === 'admin')) {
+                        currentUser = { role: 'admin', id: adminId || 'admin_master', name: adminId ? data[adminId].name : 'المدير العام' };
+                        sessionStorage.setItem('scissorsUser', JSON.stringify(currentUser));
+                        startApp();
+                    } else {
+                        showToast("بيانات الإدارة غير صحيحة", "error");
+                    }
+                } else {
+                    const res = await fetch(`${DB_URL}branches.json`);
+                    const data = await res.json() || {};
+                    const branchId = Object.keys(data).find(k => data[k].code === code && data[k].password === pass);
+                    
+                    if(branchId) {
+                        currentUser = { role: 'branch', id: branchId, name: data[branchId].name };
+                        sessionStorage.setItem('scissorsUser', JSON.stringify(currentUser));
+                        startApp();
+                    } else {
+                        showToast("بيانات الفرع غير صحيحة", "error");
+                    }
+                }
+            } catch(e) { showToast("خطأ في الاتصال بالشبكة", "error"); }
+
+            document.getElementById('loginBtn').classList.remove('hidden');
+            document.getElementById('loginLoading').classList.add('hidden');
+        }
+
+        function startApp() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('appContainer').classList.remove('hidden');
+            document.getElementById('appContainer').classList.add('flex');
+            
+            document.getElementById('userInfoDisplay').innerText = `${currentUser.role === 'admin' ? 'الإدارة' : 'فرع'}: ${currentUser.name}`;
+
+            if(currentUser.role === 'admin') {
+                document.getElementById('btn-adminTab').classList.remove('hidden');
+                document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+            } else {
+                document.getElementById('btn-adminTab').classList.add('hidden');
+                document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
+                switchTab('mainTab');
+            }
+            
+            loadAllData();
+        }
+
+        function logout() {
+            sessionStorage.removeItem('scissorsUser');
+            window.location.reload();
+        }
+
+        async function loadAllData() {
+            try {
+                document.getElementById('loadingBranches').classList.remove('hidden');
+                const [delRes, braRes, adminRes] = await Promise.all([
+                    fetch(`${DB_URL}delegates.json`),
+                    fetch(`${DB_URL}branches.json`),
+                    fetch(`${DB_URL}admins.json`)
+                ]);
+                delegates = await delRes.json() || {};
+                branches = await braRes.json() || {};
+                admins = await adminRes.json() || {};
+                
+                updateUIComponents();
+                await loadRecords();
+                document.getElementById('loadingBranches').classList.add('hidden');
+            } catch (e) { showToast("خطأ في الاتصال", "error"); }
+        }
+
+        function updateUIComponents() {
+            updateBranchesUI();
+            updateDelegatesUI();
+            updateAdminsUI();
+        }
+
+        function updateAdminsUI() {
+            const tbody = document.getElementById('adminsTableBody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+            Object.keys(admins).forEach(k => {
+                const a = admins[k];
+                tbody.innerHTML += `<tr class="border-b"><td class="p-3 font-bold">${a.name}</td><td class="p-3">${a.code}</td><td class="p-3 text-center"><button onclick="openEditModal('admin', '${k}')" class="text-secondary hover:text-primary"><i class="fa-solid fa-pen-to-square"></i></button></td></tr>`;
+            });
+        }
+
+        function updateBranchesUI() {
+            const tbody = document.getElementById('branchesTableBody');
+            const selectDel = document.getElementById('delBranch');
+            
+            if(tbody) tbody.innerHTML = '';
+            if(selectDel) selectDel.innerHTML = '<option value="">-- اختر الفرع التابع له --</option>';
+
+            const keys = Object.keys(branches).sort((a,b) => branches[a].timestamp - branches[b].timestamp);
+            keys.forEach(k => {
+                const b = branches[k];
+                if(tbody) tbody.innerHTML += `<tr class="border-b"><td class="p-3 font-bold text-primary">${b.name}</td><td class="p-3">${b.code || '-'}</td><td class="p-3 text-center"><button onclick="openEditModal('branch', '${k}')" class="text-secondary hover:text-primary"><i class="fa-solid fa-pen-to-square"></i></button></td></tr>`;
+                if(selectDel) selectDel.innerHTML += `<option value="${k}">${b.name}</option>`;
+            });
+            renderBranchButtons();
+        }
+
+        function updateDelegatesUI() {
+            const tbody = document.getElementById('delegatesTableBody');
+            const selectRecord = document.getElementById('recordDelegate');
+            
+            if(tbody) tbody.innerHTML = '';
+            if(selectRecord) selectRecord.innerHTML = '<option value="">-- يرجى اختيار مندوب --</option>';
+
+            const keys = Object.keys(delegates).sort((a,b) => delegates[b].timestamp - delegates[a].timestamp);
+            keys.forEach(k => {
+                const d = delegates[k];
+                const branchName = d.branchId && branches[d.branchId] ? branches[d.branchId].name : 'غير محدد';
+                
+                if(tbody) tbody.innerHTML += `<tr class="border-b"><td class="p-3 text-secondary font-bold">${d.code}</td><td class="p-3">${d.name}</td><td class="p-3" dir="ltr">${d.phone || '-'}</td><td class="p-3 text-gray-500">${branchName}</td><td class="p-3 text-center"><button onclick="openEditModal('delegate', '${k}')" class="text-secondary hover:text-primary"><i class="fa-solid fa-pen-to-square"></i></button></td></tr>`;
+
+                if(selectRecord) {
+                    if (currentUser.role === 'admin' || (currentUser.role === 'branch' && d.branchId === currentUser.id)) {
+                        selectRecord.innerHTML += `<option value="${k}">${d.name} (${d.code})</option>`;
+                    }
+                }
+            });
+        }
+
+        function renderBranchButtons() {
+            const grid = document.getElementById('branchButtonsGrid');
+            grid.innerHTML = '';
+            
+            const dateStr = document.getElementById('recordDate').value;
+            const records = currentRecords[dateStr] || {};
+            
+            const branchStats = {};
+            Object.values(records).forEach(r => {
+                branchStats[r.branchId] = (branchStats[r.branchId] || 0) + (Number(r.count) || 1);
+            });
+            
+            let visibleCount = 0;
+            const sortedKeys = Object.keys(branches).sort((a, b) => {
+                const countA = branchStats[a] || 0;
+                const countB = branchStats[b] || 0;
+                if (countB !== countA) return countB - countA;
+                return branches[b].timestamp - branches[a].timestamp; 
+            });
+
+            sortedKeys.forEach(k => {
+                if (currentUser.role === 'branch' && k === currentUser.id) return;
+                
+                const b = branches[k];
+                const count = branchStats[k] || 0;
+                visibleCount++;
+                
+                // استخدام ألوان مميزة لفرع الأوردر
+                const isOrder = b.name.includes('اوردار') || b.name.includes('أوردر') || b.name.includes('اوردر');
+                const btnClasses = isOrder ? "bg-amber-50 border-2 border-amber-500 text-amber-700 hover:bg-amber-500 hover:text-white" : "bg-white border-2 border-secondary text-secondary hover:bg-secondary hover:text-white";
+                const icon = isOrder ? "fa-box-open" : "fa-shop";
+
+                grid.innerHTML += `
+                    <button onclick="handleBranchLeftClick('${k}', '${b.name}')" oncontextmenu="handleBranchRightClick(event, '${k}', '${b.name}')" class="${btnClasses} font-bold py-4 px-2 rounded-xl transition shadow-sm relative overflow-hidden flex flex-col items-center">
+                        ${count > 0 ? `<span class="absolute top-0 right-0 bg-accent text-white text-[10px] px-2 py-0.5 rounded-bl-lg">${count}</span>` : ''}
+                        <i class="fa-solid ${icon} mb-1"></i>
+                        <span>${b.name}</span>
+                    </button>`;
+            });
+            document.getElementById('emptyBranchesMsg').classList.toggle('hidden', visibleCount === 0);
+        }
+
+        // --- تفاعلات الفروع (كليك شمال / يمين) ---
+        function handleBranchLeftClick(id, name) {
+            if(!document.getElementById('recordDelegate').value) {
+                return showToast("اختر المندوب أولاً", "error");
+            }
+            if (name.includes('اوردار') || name.includes('أوردر') || name.includes('اوردر')) {
+                openOrderModal(id, name);
+            } else {
+                recordClick(id, name, 1);
+            }
+        }
+
+        function handleBranchRightClick(e, id, name) {
+            e.preventDefault(); // منع ظهور قائمة المتصفح
+            if(!document.getElementById('recordDelegate').value) {
+                return showToast("اختر المندوب أولاً", "error");
+            }
+            if (name.includes('اوردار') || name.includes('أوردر') || name.includes('اوردر')) {
+                openOrderModal(id, name);
+            } else {
+                openWeightModal(id, name);
+            }
+        }
+
+        // --- نوافذ الأوردر والكميات (Modals) ---
+        function openOrderModal(id, name) {
+            pendingBranchId = id;
+            pendingBranchName = name;
+            document.getElementById('orderNumberInput').value = '';
+            document.getElementById('orderValueInput').value = '';
+            document.getElementById('orderWhatsappInput').value = '';
+            document.getElementById('orderCountInput').value = '1';
+            document.getElementById('orderModal').classList.add('active');
+        }
+
+        function closeOrderModal() { document.getElementById('orderModal').classList.remove('active'); }
+
+        function saveOrderData(sendWhatsapp) {
+            const orderNum = document.getElementById('orderNumberInput').value.trim();
+            const orderVal = document.getElementById('orderValueInput').value.trim();
+            const orderWhatsapp = document.getElementById('orderWhatsappInput').value.trim();
+            const count = parseInt(document.getElementById('orderCountInput').value) || 1;
+            
+            if(!orderNum) return showToast("يرجى إدخال رقم الأوردر", "error");
+            if(sendWhatsapp && !orderWhatsapp) return showToast("يرجى إدخال رقم الواتساب للعميل", "error");
+
+            closeOrderModal();
+            recordClick(pendingBranchId, pendingBranchName, count, orderNum, orderVal, orderWhatsapp, sendWhatsapp);
+        }
+
+        function openWeightModal(id, name) {
+            pendingBranchId = id;
+            pendingBranchName = name;
+            document.getElementById('weightBranchTitle').innerText = `للفرع: ${name}`;
+            document.getElementById('manualWeightInput').value = '1';
+            document.getElementById('weightModal').classList.add('active');
+            setTimeout(() => document.getElementById('manualWeightInput').focus(), 100);
+        }
+
+        function closeWeightModal() { document.getElementById('weightModal').classList.remove('active'); }
+
+        function saveManualWeight() {
+            const count = parseInt(document.getElementById('manualWeightInput').value) || 1;
+            if(count <= 0) return showToast("أدخل رقم صحيح أكبر من صفر", "error");
+            
+            closeWeightModal();
+            recordClick(pendingBranchId, pendingBranchName, count);
+        }
+
+        // --- الحفظ الأساسي للسجلات ---
+        async function recordClick(toBranchId, toBranchName, count = 1, orderNum = '', orderVal = '', customerWhatsapp = '', sendWhatsapp = false) {
+            const date = document.getElementById('recordDate').value;
+            const delId = document.getElementById('recordDelegate').value;
+            
+            const isOrder = orderNum !== '';
+
+            const rec = {
+                branchId: toBranchId, 
+                branchName: toBranchName,
+                delegateId: delId, 
+                delegateName: delegates[delId].name,
+                delegateCode: delegates[delId].code,
+                sourceBranchId: delegates[delId].branchId || 'admin',
+                time: new Date().toLocaleTimeString('ar-EG'),
+                timestamp: Date.now(),
+                count: count,
+                orderNumber: orderNum,
+                orderValue: orderVal,
+                customerWhatsapp: customerWhatsapp,
+                status: isOrder ? 'pending' : 'completed' // للأوردرات المعلقة
+            };
+
+            try {
+                const res = await fetch(`${DB_URL}records/${date}.json`, { method: 'POST', body: JSON.stringify(rec) });
+                if(res.ok) {
+                    showToast(`تم التسجيل بنجاح لـ ${toBranchName} (الكمية: ${count})`);
+                    await loadRecords();
+
+                    if(sendWhatsapp) {
+                        sendWhatsappMessage(customerWhatsapp, orderNum, orderVal, delegates[delId]);
+                    }
+                }
+            } catch (e) { showToast("خطأ في الحفظ", "error"); }
+        }
+
+        function sendWhatsappMessage(phone, orderNum, orderVal, delegate) {
+            // إعداد رقم الواتساب (إضافة كود الدولة إذا لم يكن موجوداً)
+            let formattedPhone = phone.replace(/\D/g, '');
+            if (formattedPhone.startsWith('01')) {
+                formattedPhone = '2' + formattedPhone;
+            }
+
+            const message = `*حالة الأوردر:* خرج للتوصيل 🚚\n*رقم الأوردر:* ${orderNum}\n*قيمة الأوردر:* ${orderVal ? orderVal + ' ج.م' : '-'}\n*بيانات المندوب لتواصل:*\n👤 الاســم: ${delegate.name}\n📞 الهاتـف: ${delegate.phone || 'غير مسجل'}`;
+            const encodedMsg = encodeURIComponent(message);
+            
+            const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMsg}`;
+            window.open(whatsappUrl, '_blank');
+        }
+
+        async function loadRecords() {
+            const date = document.getElementById('recordDate').value;
+            try {
+                const res = await fetch(`${DB_URL}records/${date}.json`);
+                currentRecords[date] = await res.json() || {};
+                renderRecordsTable(date);
+                renderBranchButtons(); 
+            } catch (e) {}
+        }
+
+        function renderRecordsTable(date) {
+            const tbody = document.getElementById('recordsTableBody');
+            const data = currentRecords[date] || {};
+            
+            const filteredKeys = Object.keys(data).filter(k => {
+                if(currentUser.role === 'admin') return true;
+                const record = data[k];
+                if (!record.sourceBranchId) {
+                    const delegate = delegates[record.delegateId];
+                    return delegate && delegate.branchId === currentUser.id;
+                }
+                return record.sourceBranchId === currentUser.id;
+            });
+            
+            filteredKeys.sort((a,b) => data[b].timestamp - data[a].timestamp);
+            
+            // حساب الإجمالي بناء على الكمية (count) وليس عدد الصفوف فقط
+            let totalCounter = 0;
+            filteredKeys.forEach(k => { totalCounter += (Number(data[k].count) || 1); });
+            
+            document.getElementById('totalClicksCounter').textContent = totalCounter;
+            
+            tbody.innerHTML = filteredKeys.length ? '' : `<tr><td colspan="${currentUser.role==='admin'?7:6}" class="p-4 text-center">لا توجد سجلات</td></tr>`;
+            
+            filteredKeys.forEach((k, i) => {
+                const r = data[k];
+                const rCount = Number(r.count) || 1;
+                let orderDetails = '<span class="text-gray-300">-</span>';
+                
+                if (r.orderNumber) {
+                    let statusBadge = r.status === 'delivered' ? '<span class="text-[10px] bg-green-500 text-white px-1 rounded mr-1">تم التوصيل</span>' : '<span class="text-[10px] bg-amber-500 text-white px-1 rounded mr-1">معلق</span>';
+                    orderDetails = `<span class="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded inline-block">رقم: ${r.orderNumber} ${r.orderValue ? ` | قيمة: ${r.orderValue} ` : ''} ${statusBadge}</span>`;
+                }
+
+                tbody.innerHTML += `
+                <tr class="border-b hover:bg-blue-50">
+                    <td class="p-3">${i+1}</td><td class="p-3" dir="ltr">${r.time}</td>
+                    <td class="p-3 text-sm"><span class="bg-gray-100 px-2 rounded border">${r.delegateCode}</span> ${r.delegateName}</td>
+                    <td class="p-3 font-bold text-primary">${r.branchName}</td>
+                    <td class="p-3 text-center"><span class="bg-accent px-2 py-0.5 text-white font-bold rounded-full">x${rCount}</span></td>
+                    <td class="p-3">${orderDetails}</td>
+                    ${currentUser.role === 'admin' ? `<td class="p-3 text-center"><button onclick="deleteRecord('${date}', '${k}')" class="text-red-500 hover:text-red-700 bg-red-50 px-3 py-1 rounded"><i class="fa-solid fa-trash"></i></button></td>` : ''}
+                </tr>`;
+            });
+
+            updateDelegateTotal(); // تحديث إجمالي المندوب المعروض حالياً
+        }
+
+        function updateDelegateTotal() {
+            const delId = document.getElementById('recordDelegate').value;
+            const dateStr = document.getElementById('recordDate').value;
+            const box = document.getElementById('delegateTotalBox');
+            const valSpan = document.getElementById('delegateTotalValue');
+            
+            if(!delId) {
+                box.classList.add('hidden');
+                return;
+            }
+
+            const records = currentRecords[dateStr] || {};
+            let delTotal = 0;
+            Object.values(records).forEach(r => {
+                if(r.delegateId === delId) {
+                    delTotal += (Number(r.count) || 1);
+                }
+            });
+
+            valSpan.textContent = delTotal;
+            box.classList.remove('hidden');
+        }
+
+        async function deleteRecord(date, recordId) {
+            if(!confirm("هل أنت متأكد من حذف هذا السجل؟")) return;
+            try {
+                await fetch(`${DB_URL}records/${date}/${recordId}.json`, { method: 'DELETE' });
+                showToast("تم الحذف بنجاح");
+                loadRecords();
+            } catch(e) { showToast("خطأ أثناء الحذف", "error"); }
+        }
+
+        // --- الأوردرات المعلقة ---
+        async function openPendingOrdersModal() {
+            document.getElementById('pendingOrdersModal').classList.add('active');
+            const tbody = document.getElementById('pendingOrdersTableBody');
+            document.getElementById('pendingLoading').classList.remove('hidden');
+            tbody.innerHTML = '';
+
+            // جلب بيانات اليوم واليومين السابقين كحد أقصى للبحث عن الأوردرات المعلقة
+            const datesToFetch = [];
+            for(let i=0; i<3; i++) {
+                let d = new Date();
+                d.setDate(d.getDate() - i);
+                datesToFetch.push(d.toISOString().split('T')[0]);
+            }
+
+            let pendingOrders = [];
+            
+            try {
+                const results = await Promise.all(datesToFetch.map(d => fetch(`${DB_URL}records/${d}.json`).then(r => r.json())));
+                
+                results.forEach((dayData, index) => {
+                    if(dayData) {
+                        const dateStr = datesToFetch[index];
+                        Object.keys(dayData).forEach(k => {
+                            const r = dayData[k];
+                            // فلترة: يجب أن يكون أوردر، وأن تكون حالته معلقة (pending)، ومطابق للفرع إذا كان فرع
+                            if(r.orderNumber && r.status === 'pending') {
+                                if (currentUser.role === 'admin' || r.sourceBranchId === currentUser.id || (delegates[r.delegateId] && delegates[r.delegateId].branchId === currentUser.id)) {
+                                    pendingOrders.push({ id: k, date: dateStr, ...r });
+                                }
+                            }
+                        });
+                    }
+                });
+
+                pendingOrders.sort((a,b) => b.timestamp - a.timestamp);
+
+                if(pendingOrders.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-gray-500">لا توجد أوردرات معلقة حالياً</td></tr>';
+                } else {
+                    pendingOrders.forEach(r => {
+                        tbody.innerHTML += `
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="p-3 text-sm"><div>${r.date}</div><div class="text-xs text-gray-500" dir="ltr">${r.time}</div></td>
+                            <td class="p-3"><span class="font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded">رقم: ${r.orderNumber}</span></td>
+                            <td class="p-3">${r.delegateName}</td>
+                            <td class="p-3 text-center">
+                                <button onclick="markOrderAsDelivered('${r.date}', '${r.id}')" class="bg-green-500 text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-green-600 shadow-sm"><i class="fa-solid fa-check mr-1"></i> تم التوصيل</button>
+                            </td>
+                        </tr>`;
+                    });
+                }
+            } catch(e) {
+                showToast("حدث خطأ في جلب الأوردرات", "error");
+            }
+            document.getElementById('pendingLoading').classList.add('hidden');
+        }
+
+        function closePendingOrdersModal() {
+            document.getElementById('pendingOrdersModal').classList.remove('active');
+        }
+
+        async function markOrderAsDelivered(date, recordId) {
+            if(!confirm("هل أنت متأكد من تسليم هذا الأوردر بنجاح؟")) return;
+            
+            try {
+                await fetch(`${DB_URL}records/${date}/${recordId}.json`, { 
+                    method: 'PATCH', 
+                    body: JSON.stringify({ 
+                        status: 'delivered', 
+                        deliveryTimestamp: Date.now() 
+                    }) 
+                });
+                showToast("تم تحديث حالة الأوردر إلى 'تم التوصيل'");
+                
+                // إعادة تحميل النوافذ المفتوحة
+                openPendingOrdersModal();
+                if(document.getElementById('recordDate').value === date) {
+                    loadRecords();
+                }
+            } catch(e) {
+                showToast("خطأ في تحديث الحالة", "error");
+            }
+        }
+
+
+        // --- عمليات التعديل والحفظ الأخرى ---
+        async function handleAddAdmin(e) {
+            e.preventDefault();
+            const d = { name: document.getElementById('adminName').value, code: document.getElementById('adminCode').value, password: document.getElementById('adminPass').value, timestamp: Date.now() };
+            await fetch(`${DB_URL}admins.json`, { method: 'POST', body: JSON.stringify(d) });
+            e.target.reset();
+            loadAllData();
+            showToast("تم حفظ المسؤول");
+        }
+
+        async function handleAddBranch(e) {
+            e.preventDefault();
+            const b = { name: document.getElementById('branchName').value, code: document.getElementById('branchCode').value, password: document.getElementById('branchPass').value, timestamp: Date.now() };
+            await fetch(`${DB_URL}branches.json`, { method: 'POST', body: JSON.stringify(b) });
+            e.target.reset();
+            loadAllData();
+            showToast("تم حفظ الفرع");
+        }
+
+        async function handleAddDelegate(e) {
+            e.preventDefault();
+            const d = { 
+                name: document.getElementById('delName').value, 
+                phone: document.getElementById('delPhone').value,
+                code: document.getElementById('delCode').value, 
+                branchId: document.getElementById('delBranch').value, 
+                timestamp: Date.now() 
+            };
+            await fetch(`${DB_URL}delegates.json`, { method: 'POST', body: JSON.stringify(d) });
+            e.target.reset();
+            loadAllData();
+            showToast("تم حفظ المندوب");
+        }
+
+        let currentEditType = '', currentEditId = '';
+        function openEditModal(type, id) {
+            currentEditType = type; currentEditId = id;
+            const modal = document.getElementById('editModal');
+            const fields = document.getElementById('modalFields');
+            const title = document.getElementById('modalTitle');
+            
+            if(type === 'admin') {
+                title.innerText = "تعديل بيانات المسؤول";
+                const d = admins[id];
+                fields.innerHTML = `<input type="text" id="editAdminName" value="${d.name}" class="w-full px-4 py-2 border rounded-lg mb-3"><input type="text" id="editAdminCode" value="${d.code}" class="w-full px-4 py-2 border rounded-lg mb-3"><input type="text" id="editAdminPass" value="${d.password}" placeholder="كلمة المرور" class="w-full px-4 py-2 border rounded-lg">`;
+            } else if (type === 'branch') {
+                title.innerText = "تعديل بيانات الفرع";
+                const d = branches[id];
+                fields.innerHTML = `<input type="text" id="editBranchName" value="${d.name}" class="w-full px-4 py-2 border rounded-lg mb-3"><input type="text" id="editBranchCode" value="${d.code||''}" placeholder="كود الفرع" class="w-full px-4 py-2 border rounded-lg mb-3"><input type="text" id="editBranchPass" value="${d.password||''}" placeholder="كلمة المرور" class="w-full px-4 py-2 border rounded-lg">`;
+            } else if (type === 'delegate') {
+                title.innerText = "تعديل بيانات المندوب";
+                const d = delegates[id];
+                let branchOptions = '<option value="">-- بدون فرع --</option>';
+                Object.keys(branches).forEach(k => { branchOptions += `<option value="${k}" ${d.branchId===k?'selected':''}>${branches[k].name}</option>`; });
+                fields.innerHTML = `
+                    <input type="text" id="editDelName" value="${d.name}" placeholder="الاسم" class="w-full px-4 py-2 border rounded-lg mb-3">
+                    <input type="text" id="editDelPhone" value="${d.phone || ''}" placeholder="رقم الهاتف" class="w-full px-4 py-2 border rounded-lg mb-3">
+                    <input type="text" id="editDelCode" value="${d.code}" placeholder="الكود" class="w-full px-4 py-2 border rounded-lg mb-3">
+                    <select id="editDelBranch" class="w-full px-4 py-2 border rounded-lg">${branchOptions}</select>`;
+            }
+            modal.classList.add('active');
+        }
+
+        function closeModal() { document.getElementById('editModal').classList.remove('active'); }
+
+        async function handleEditSave(e) {
+            e.preventDefault();
+            let url = '', data = {};
+            if(currentEditType === 'admin') {
+                url = `${DB_URL}admins/${currentEditId}.json`;
+                data = { ...admins[currentEditId], name: document.getElementById('editAdminName').value, code: document.getElementById('editAdminCode').value, password: document.getElementById('editAdminPass').value };
+            } else if (currentEditType === 'branch') {
+                url = `${DB_URL}branches/${currentEditId}.json`;
+                data = { ...branches[currentEditId], name: document.getElementById('editBranchName').value, code: document.getElementById('editBranchCode').value, password: document.getElementById('editBranchPass').value };
+            } else if (currentEditType === 'delegate') {
+                url = `${DB_URL}delegates/${currentEditId}.json`;
+                data = { ...delegates[currentEditId], name: document.getElementById('editDelName').value, phone: document.getElementById('editDelPhone').value, code: document.getElementById('editDelCode').value, branchId: document.getElementById('editDelBranch').value };
+            }
+
+            try {
+                await fetch(url, { method: 'PATCH', body: JSON.stringify(data) });
+                showToast("تم التعديل بنجاح");
+                closeModal();
+                loadAllData();
+            } catch(err) { showToast("خطأ في التعديل", "error"); }
+        }
+
+        function formatTimeDiff(ms) {
+            if(!ms || ms < 0) return '-';
+            const totalMinutes = Math.floor(ms / 60000);
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = totalMinutes % 60;
+            if(hours > 0) return `${hours} س و ${minutes} د`;
+            return `${minutes} دقيقة`;
+        }
+
+        // --- التقارير ---
+        async function generateReport() {
+            const start = document.getElementById('repFromDate').value;
+            const end = document.getElementById('repToDate').value;
+            const code = document.getElementById('repDelCode').value.trim();
+            const orderFilter = document.getElementById('repOrderNum').value.trim();
+            
+            document.getElementById('reportLoading').classList.remove('hidden');
+            let all = [];
+            const dates = [];
+            let curr = new Date(start);
+            while(curr <= new Date(end)) {
+                dates.push(curr.toISOString().split('T')[0]);
+                curr.setDate(curr.getDate() + 1);
+            }
+            
+            const res = await Promise.all(dates.map(d => fetch(`${DB_URL}records/${d}.json`).then(r => r.json())));
+            res.forEach((day, i) => {
+                if(day) {
+                    Object.values(day).forEach(r => {
+                        const codeMatch = !code || r.delegateCode === code;
+                        const orderMatch = !orderFilter || (r.orderNumber && r.orderNumber.includes(orderFilter));
+                        
+                        if(codeMatch && orderMatch) {
+                            all.push({...r, date: dates[i]});
+                        }
+                    });
+                }
+            });
+            
+            all.sort((a,b) => b.timestamp - a.timestamp);
+            
+            let reportTotal = 0;
+            const tbody = document.getElementById('reportTableBody');
+            tbody.innerHTML = '';
+            
+            all.forEach(r => {
+                const rCount = Number(r.count) || 1;
+                reportTotal += rCount;
+                
+                const orderDetails = r.orderNumber ? `<span class="font-bold text-amber-700">رقم: ${r.orderNumber}</span><br><span class="text-xs text-gray-500">قيمة: ${r.orderValue||'-'}</span>` : '<span class="text-gray-300">-</span>';
+                
+                let deliveryStatusHtml = '-';
+                if(r.orderNumber) {
+                    if(r.status === 'delivered' && r.deliveryTimestamp) {
+                        const timeTaken = formatTimeDiff(r.deliveryTimestamp - r.timestamp);
+                        deliveryStatusHtml = `<div class="text-green-600 font-bold text-sm"><i class="fa-solid fa-check-circle"></i> تم التوصيل</div><div class="text-xs text-gray-500">المدة: ${timeTaken}</div>`;
+                    } else {
+                        deliveryStatusHtml = `<div class="text-amber-500 font-bold text-sm"><i class="fa-solid fa-clock"></i> قيد التوصيل</div>`;
+                    }
+                }
+
+                tbody.innerHTML += `
+                <tr class="border-b">
+                    <td class="p-3 text-sm"><div>${r.date}</div><div class="text-xs text-gray-500" dir="ltr">${r.time}</div></td>
+                    <td class="p-3"><span class="font-bold bg-gray-50 px-1 rounded border">${r.delegateCode}</span> ${r.delegateName}</td>
+                    <td class="p-3 font-bold text-teal-600">${r.branchName}</td>
+                    <td class="p-3 text-center"><span class="bg-accent px-2 py-1 text-white font-bold rounded">x${rCount}</span></td>
+                    <td class="p-3">${orderDetails}</td>
+                    <td class="p-3">${deliveryStatusHtml}</td>
+                </tr>`;
+            });
+            
+            if(all.length === 0) tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-gray-500">لا توجد بيانات مطابقة</td></tr>';
+            
+            document.getElementById('reportTotalClicks').textContent = reportTotal;
+            document.getElementById('reportLoading').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
+
+
